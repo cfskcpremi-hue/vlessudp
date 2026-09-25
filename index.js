@@ -95,7 +95,7 @@ class GatewayServer {
       </div>
       <div class="neon-card p-4 rounded-xl">
         <p class="text-[10px] text-slate-500 font-bold mb-1">DOMAIN AKTIF</p>
-        <p id="domain-display" class="text-xs font-bold text-cyan-400 truncate mt-1">-</p>
+        <p id="domain-display" class="text-[11px] font-bold text-cyan-400 break-all mt-1 leading-tight">-</p>
       </div>
       <div class="neon-card p-4 rounded-xl">
         <p class="text-[10px] text-slate-500 font-bold mb-1">UDP & DNS</p>
@@ -304,9 +304,13 @@ class GatewayServer {
         const parts = this.prxIP.split(":");
         const s = await connectAndWrite(parts[0], parseInt(parts[1], 10) || 443);
         remoteSocket.value = s;
+        // Kirim response header VLESS secara instan untuk mencegah EOF saat retry
+        if (responseHeader && webSocket.readyState === WebSocket.OPEN) {
+          webSocket.send(Buffer.from(responseHeader));
+        }
         s.on('close', () => { if (webSocket.readyState === WebSocket.OPEN) webSocket.close(); });
         s.on('error', () => { if (webSocket.readyState === WebSocket.OPEN) webSocket.close(); });
-        this.remoteSocketToWS(s, webSocket, responseHeader, null);
+        this.remoteSocketToWS(s, webSocket, null, null);
       } catch (e) {
         if (webSocket.readyState === WebSocket.OPEN) webSocket.close();
       }
@@ -315,9 +319,13 @@ class GatewayServer {
     try {
       const s = await connectAndWrite(addressRemote, portRemote);
       remoteSocket.value = s;
+      // Kirim response header VLESS secara instan untuk mencegah EOF
+      if (responseHeader && webSocket.readyState === WebSocket.OPEN) {
+        webSocket.send(Buffer.from(responseHeader));
+      }
       s.on('close', () => { if (webSocket.readyState === WebSocket.OPEN) webSocket.close(); });
       s.on('error', () => { if (webSocket.readyState === WebSocket.OPEN) webSocket.close(); });
-      this.remoteSocketToWS(s, webSocket, responseHeader, retry);
+      this.remoteSocketToWS(s, webSocket, null, retry);
     } catch (e) {
       await retry();
     }
@@ -402,7 +410,6 @@ class GatewayServer {
   }
 
   remoteSocketToWS(remoteSocket, webSocket, responseHeader, retry) {
-    let header = responseHeader;
     let hasData = false;
 
     remoteSocket.on('data', (chunk) => {
@@ -411,28 +418,11 @@ class GatewayServer {
         remoteSocket.destroy(); 
         return; 
       }
-      if (header) {
-        webSocket.send(Buffer.concat([Buffer.from(header), chunk]));
-        header = null;
-      } else {
-        webSocket.send(chunk);
-      }
-    });
-
-    remoteSocket.on('connect', () => {
-      if (header && webSocket.readyState === WebSocket.OPEN && responseHeader) {
-        webSocket.send(Buffer.from(responseHeader));
-        header = null;
-      }
+      webSocket.send(chunk);
     });
 
     remoteSocket.on('close', () => { 
-      if (!hasData && retry) {
-        retry();
-      } else if (header && webSocket.readyState === WebSocket.OPEN) {
-        webSocket.send(Buffer.from(header));
-        header = null;
-      }
+      if (!hasData && retry) retry(); 
     });
   }
 
