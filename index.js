@@ -16,7 +16,7 @@ const PROXY_MAP = {
 };
 
 const horse = Buffer.from("dHJvamFu", 'base64').toString(); // trojan
-const flash = Buffer.from("dm1lc3M=", 'base64').toString(); // vmess
+const flash = Buffer.from("dm1lc3M=", 'base64').toString(); // vmess / vless identifier
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -216,7 +216,7 @@ class GatewayServer {
 
   async handleWebSocketConnection(ws, request) {
     try {
-      ws.id = Math.random().toString(36).substring(2, 9); // Unik WS ID
+      ws.id = Math.random().toString(36).substring(2, 9);
       const parsedUrl = url.parse(request.url, true);
       const rawPath = parsedUrl.pathname.replace("/", "");
 
@@ -276,8 +276,8 @@ class GatewayServer {
 
   async protocolSniffer(buffer) {
     if (buffer.length >= 62) {
-      const d = buffer.slice(56, 60);
-      if (d[0] === 0x0d && d[1] === 0x0a && [0x01,0x03,0x7f].includes(d[2]) && [0x01,0x03,0x04].includes(d[3])) return horse;
+      const d = buffer.slice(58);
+      if (d[0] === 0x03 || d[1] === 0x01 || d[1] === 0x03 || d[1] === 0x04) return horse;
     }
     const h = buffer.slice(1, 17).toString('hex');
     if (h.match(/^[0-9a-f]{8}[0-9a-f]{4}4[0-9a-f]{3}[89ab][0-9a-f]{3}[0-9a-f]{12}$/i)) return flash;
@@ -329,15 +329,56 @@ class GatewayServer {
   }
 
   readFlashHeader(buf) {
-    const v = buf[0]; let udp = false;
-    const ol = buf[17]; const cmd = buf[18+ol];
-    if (cmd === 2) udp = true;
-    const pi = 18+ol+1; const pr = buf.readUInt16BE(pi);
-    let ai = pi+2; const at = buf[ai]; let al = 0, avi = ai+1, av = "";
-    if (at === 1) { al = 4; av = Array.from(buf.slice(avi, avi+al)).join("."); }
-    else if (at === 2) { al = buf[avi]; avi += 1; av = buf.slice(avi, avi+al).toString(); }
-    else if (at === 3) { al = 16; const ip = []; for(let i=0;i<8;i++) ip.push(buf.readUInt16BE(avi+i*2).toString(16)); av = ip.join(":"); }
-    return { hasError: false, addressRemote: av, portRemote: pr, rawDataIndex: avi+al, rawClientData: buf.slice(avi+al), version: Buffer.from([v,0]), isUDP: udp };
+    try {
+      if (buf.length < 25) return { hasError: true, message: "VLESS buffer too short" };
+      const v = buf[0];
+      const ol = buf[17]; 
+      const cmdIndex = 18 + ol;
+      if (buf.length <= cmdIndex) return { hasError: true, message: "Invalid VLESS command offset" };
+      
+      const cmd = buf[cmdIndex];
+      let udp = (cmd === 2);
+      
+      const pi = cmdIndex + 1;
+      if (buf.length < pi + 2) return { hasError: true, message: "Invalid VLESS port offset" };
+      const pr = buf.readUInt16BE(pi);
+      
+      let ai = pi + 2;
+      const at = buf[ai];
+      let al = 0, avi = ai + 1, av = "";
+      
+      if (at === 1) { 
+        al = 4; 
+        if (buf.length < avi + al) return { hasError: true, message: "Invalid IPv4 length" };
+        av = Array.from(buf.slice(avi, avi + al)).join("."); 
+      } else if (at === 2) { 
+        al = buf[avi]; 
+        avi += 1; 
+        if (buf.length < avi + al) return { hasError: true, message: "Invalid Domain length" };
+        av = buf.slice(avi, avi + al).toString(); 
+      } else if (at === 3) { 
+        al = 16; 
+        if (buf.length < avi + al) return { hasError: true, message: "Invalid IPv6 length" };
+        const ip = []; 
+        for (let i = 0; i < 8; i++) ip.push(buf.readUInt16BE(avi + i * 2).toString(16)); 
+        av = ip.join(":"); 
+      } else {
+        return { hasError: true, message: `Invalid VLESS address type: ${at}` };
+      }
+      
+      const rawDataIndex = avi + al;
+      return { 
+        hasError: false, 
+        addressRemote: av, 
+        portRemote: pr, 
+        rawDataIndex: rawDataIndex, 
+        rawClientData: buf.slice(rawDataIndex), 
+        version: Buffer.from([v, 0]), 
+        isUDP: udp 
+      };
+    } catch (e) {
+      return { hasError: true, message: "Failed parsing VLESS header: " + e.message };
+    }
   }
 
   readHorseHeader(buf) {
