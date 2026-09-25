@@ -279,8 +279,10 @@ class GatewayServer {
       const d = buffer.slice(58);
       if (d[0] === 0x03 || d[1] === 0x01 || d[1] === 0x03 || d[1] === 0x04) return horse;
     }
-    const h = buffer.slice(1, 17).toString('hex');
-    if (h.match(/^[0-9a-f]{8}[0-9a-f]{4}4[0-9a-f]{3}[89ab][0-9a-f]{3}[0-9a-f]{12}$/i)) return flash;
+    // Fleksibel menerima payload VLESS/VMess apa pun tanpa validasi ketat
+    if (buffer.length >= 18) {
+      return flash;
+    }
     return "ss";
   }
 
@@ -330,10 +332,11 @@ class GatewayServer {
 
   readFlashHeader(buf) {
     try {
-      if (buf.length < 25) return { hasError: true, message: "VLESS buffer too short" };
+      if (buf.length < 19) return { hasError: true, message: "VLESS buffer too short" };
       const v = buf[0];
       const ol = buf[17]; 
       const cmdIndex = 18 + ol;
+      
       if (buf.length <= cmdIndex) return { hasError: true, message: "Invalid VLESS command offset" };
       
       const cmd = buf[cmdIndex];
