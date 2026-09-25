@@ -7,7 +7,6 @@ const udpManager = require('./udp');
 const PORT = process.env.PORT || 3000;
 const SYSTEM_UUID = process.env.SYSTEM_UUID || "c48619fe-8f02-49e0-b9e9-edf763e17e21";
 
-// Mapping Custom Path ke IP Target
 const PROXY_MAP = {
   "id-akamai": "172.232.249.224:2053",
   "id-deneva": "202.155.95.132:443",
@@ -15,8 +14,8 @@ const PROXY_MAP = {
   "sg-oracle": "138.2.64.229:443"
 };
 
-const horse = Buffer.from("dHJvamFu", 'base64').toString(); // trojan
-const flash = Buffer.from("dm1lc3M=", 'base64').toString(); // vmess / vless identifier
+const horse = Buffer.from("dHJvamFu", 'base64').toString();
+const flash = Buffer.from("dm1lc3M=", 'base64').toString();
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -172,7 +171,7 @@ class GatewayServer {
   </main>
 
   <script>
-    const currentHost = location.host.split(':')[0];
+    const currentHost = location.host;
 
     function genUUID() {
       document.getElementById('uuid').value = crypto.randomUUID();
@@ -192,8 +191,8 @@ class GatewayServer {
       const cleanPath = "/" + p;
       const remarkTag = encodeURIComponent(\`\${r}[\${labelExp}]-\${p}\`);
 
-      document.getElementById('vless').value = \`vless://\${u}@\${currentHost}:443?encryption=none&security=tls&sni=\${currentHost}&type=ws&host=\${currentHost}&path=\${encodeURIComponent(cleanPath)}#\${remarkTag}\`;
-      document.getElementById('trojan').value = \`trojan://\${u}@\${currentHost}:443?security=tls&sni=\${currentHost}&type=ws&host=\${currentHost}&path=\${encodeURIComponent(cleanPath)}#\${remarkTag}\`;
+      document.getElementById('vless').value = \`vless://\${u}@\${currentHost}?encryption=none&security=tls&sni=\${currentHost.split(':')[0]}&type=ws&host=\${currentHost.split(':')[0]}&path=\${encodeURIComponent(cleanPath)}#\${remarkTag}\`;
+      document.getElementById('trojan').value = \`trojan://\${u}@\${currentHost}?security=tls&sni=\${currentHost.split(':')[0]}&type=ws&host=\${currentHost.split(':')[0]}&path=\${encodeURIComponent(cleanPath)}#\${remarkTag}\`;
     }
 
     function copyId(id) {
@@ -203,7 +202,11 @@ class GatewayServer {
       alert('Config berhasil disalin!');
     }
 
-    window.onload = genAcc;
+    window.onload = () => {
+      // Otomatis buat UUID random saat halaman pertama kali dibuka agar dinamis
+      document.getElementById('uuid').value = crypto.randomUUID();
+      genAcc();
+    };
   </script>
 </body>
 </html>`);
@@ -279,7 +282,6 @@ class GatewayServer {
       const d = buffer.slice(58);
       if (d[0] === 0x03 || d[1] === 0x01 || d[1] === 0x03 || d[1] === 0x04) return horse;
     }
-    // Fleksibel menerima payload VLESS/VMess apa pun tanpa validasi ketat
     if (buffer.length >= 18) {
       return flash;
     }
@@ -407,11 +409,20 @@ class GatewayServer {
         remoteSocket.destroy(); 
         return; 
       }
+      // Kirim header VLESS response (mencegah EOF) tepat saat chunk data pertama diterima dari target
       if (header) {
         webSocket.send(Buffer.concat([Buffer.from(header), chunk]));
         header = null;
       } else {
         webSocket.send(chunk);
+      }
+    });
+
+    // Handle jika target langsung konek tanpa chunk data instan
+    remoteSocket.on('connect', () => {
+      if (header && webSocket.readyState === WebSocket.OPEN && responseHeader) {
+        webSocket.send(Buffer.from(responseHeader));
+        header = null;
       }
     });
 
