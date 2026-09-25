@@ -1,0 +1,47 @@
+{
+  "log": {
+    "loglevel": "warning"
+  },
+  "inbounds": [
+  {
+    "port": 3000,
+    "protocol": "vless",
+    "settings": {
+      "clients": [
+        {
+          "id": "c48619fe-8f02-49e0-b9e9-edf763e17e21"
+        }
+      ],
+      "decryption": "none"
+    },
+    "streamSettings": {
+      "network": "ws",
+      "wsSettings": {
+        "path": "/id-deneva"
+      }
+    }
+  },
+  {
+    "port": 3000,
+    "protocol": "trojan",
+    "settings": {
+      "clients": [
+        {
+          "password": "c48619fe-8f02-49e0-b9e9-edf763e17e21"
+        }
+      ]
+    },
+    "streamSettings": {
+      "network": "ws",
+      "wsSettings": {
+        "path": "/id-deneva"
+      }
+    }
+  }
+],
+  "outbounds": [
+    {
+      "protocol": "freedom"
+    }
+  ]
+}
