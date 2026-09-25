@@ -94,8 +94,8 @@ class GatewayServer {
         <p class="text-lg font-bold text-emerald-400">${ramUsed} MB</p>
       </div>
       <div class="neon-card p-4 rounded-xl">
-        <p class="text-[10px] text-slate-500 font-bold mb-1">PROTOKOL</p>
-        <p class="text-lg font-bold text-purple-400">VLESS / TROJAN</p>
+        <p class="text-[10px] text-slate-500 font-bold mb-1">DOMAIN AKTIF</p>
+        <p id="domain-display" class="text-xs font-bold text-cyan-400 truncate mt-1">-</p>
       </div>
       <div class="neon-card p-4 rounded-xl">
         <p class="text-[10px] text-slate-500 font-bold mb-1">UDP & DNS</p>
@@ -118,7 +118,7 @@ class GatewayServer {
                 <i class="fa-solid fa-arrows-rotate"></i> ACAK UUID
               </button>
             </div>
-            <input id="uuid" type="text" value="${SYSTEM_UUID}" class="w-full bg-[#06070c] border border-slate-800 rounded-lg p-2.5 text-xs text-emerald-300 font-mono">
+            <input id="uuid" type="text" class="w-full bg-[#06070c] border border-slate-800 rounded-lg p-2.5 text-xs text-emerald-300 font-mono">
           </div>
 
           <div>
@@ -172,6 +172,9 @@ class GatewayServer {
 
   <script>
     const currentHost = location.host;
+    const currentDomainOnly = location.host.split(':')[0];
+
+    document.getElementById('domain-display').innerText = currentHost;
 
     function genUUID() {
       document.getElementById('uuid').value = crypto.randomUUID();
@@ -191,8 +194,8 @@ class GatewayServer {
       const cleanPath = "/" + p;
       const remarkTag = encodeURIComponent(\`\${r}[\${labelExp}]-\${p}\`);
 
-      document.getElementById('vless').value = \`vless://\${u}@\${currentHost}?encryption=none&security=tls&sni=\${currentHost.split(':')[0]}&type=ws&host=\${currentHost.split(':')[0]}&path=\${encodeURIComponent(cleanPath)}#\${remarkTag}\`;
-      document.getElementById('trojan').value = \`trojan://\${u}@\${currentHost}?security=tls&sni=\${currentHost.split(':')[0]}&type=ws&host=\${currentHost.split(':')[0]}&path=\${encodeURIComponent(cleanPath)}#\${remarkTag}\`;
+      document.getElementById('vless').value = \`vless://\${u}@\${currentHost}?encryption=none&security=tls&sni=\${currentDomainOnly}&type=ws&host=\${currentDomainOnly}&path=\${encodeURIComponent(cleanPath)}#\${remarkTag}\`;
+      document.getElementById('trojan').value = \`trojan://\${u}@\${currentHost}?security=tls&sni=\${currentDomainOnly}&type=ws&host=\${currentDomainOnly}&path=\${encodeURIComponent(cleanPath)}#\${remarkTag}\`;
     }
 
     function copyId(id) {
@@ -203,7 +206,6 @@ class GatewayServer {
     }
 
     window.onload = () => {
-      // Otomatis buat UUID random saat halaman pertama kali dibuka agar dinamis
       document.getElementById('uuid').value = crypto.randomUUID();
       genAcc();
     };
@@ -409,7 +411,6 @@ class GatewayServer {
         remoteSocket.destroy(); 
         return; 
       }
-      // Kirim header VLESS response (mencegah EOF) tepat saat chunk data pertama diterima dari target
       if (header) {
         webSocket.send(Buffer.concat([Buffer.from(header), chunk]));
         header = null;
@@ -418,7 +419,6 @@ class GatewayServer {
       }
     });
 
-    // Handle jika target langsung konek tanpa chunk data instan
     remoteSocket.on('connect', () => {
       if (header && webSocket.readyState === WebSocket.OPEN && responseHeader) {
         webSocket.send(Buffer.from(responseHeader));
