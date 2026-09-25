@@ -171,10 +171,9 @@ class GatewayServer {
   </main>
 
   <script>
-    const currentHost = location.host;
-    const currentDomainOnly = location.host.split(':')[0];
+    const currentDomain = location.hostname;
 
-    document.getElementById('domain-display').innerText = currentHost;
+    document.getElementById('domain-display').innerText = location.host;
 
     function genUUID() {
       document.getElementById('uuid').value = crypto.randomUUID();
@@ -194,8 +193,9 @@ class GatewayServer {
       const cleanPath = "/" + p;
       const remarkTag = encodeURIComponent(\`\${r}[\${labelExp}]-\${p}\`);
 
-      document.getElementById('vless').value = \`vless://\${u}@\${currentHost}?encryption=none&security=tls&sni=\${currentDomainOnly}&type=ws&host=\${currentDomainOnly}&path=\${encodeURIComponent(cleanPath)}#\${remarkTag}\`;
-      document.getElementById('trojan').value = \`trojan://\${u}@\${currentHost}?security=tls&sni=\${currentDomainOnly}&type=ws&host=\${currentDomainOnly}&path=\${encodeURIComponent(cleanPath)}#\${remarkTag}\`;
+      // Memastikan port 443 selalu ada secara eksplisit agar v2rayNG tidak membaca port kosong/salah
+      document.getElementById('vless').value = \`vless://\${u}@\${currentDomain}:443?encryption=none&security=tls&sni=\${currentDomain}&type=ws&host=\${currentDomain}&path=\${encodeURIComponent(cleanPath)}#\${remarkTag}\`;
+      document.getElementById('trojan').value = \`trojan://\${u}@\${currentDomain}:443?security=tls&sni=\${currentDomain}&type=ws&host=\${currentDomain}&path=\${encodeURIComponent(cleanPath)}#\${remarkTag}\`;
     }
 
     function copyId(id) {
@@ -293,6 +293,10 @@ class GatewayServer {
   async handleTCPOutBound(remoteSocket, addressRemote, portRemote, rawClientData, webSocket, responseHeader) {
     const connectAndWrite = (address, port) => new Promise((resolve, reject) => {
       const s = net.createConnection({ host: address, port }, () => {
+        // Kirim response header VLESS secara langsung begitu koneksi target sukses terbuka
+        if (responseHeader && webSocket.readyState === WebSocket.OPEN) {
+          webSocket.send(Buffer.from(responseHeader));
+        }
         s.write(rawClientData);
         resolve(s);
       });
@@ -304,10 +308,6 @@ class GatewayServer {
         const parts = this.prxIP.split(":");
         const s = await connectAndWrite(parts[0], parseInt(parts[1], 10) || 443);
         remoteSocket.value = s;
-        // Kirim response header VLESS secara instan untuk mencegah EOF saat retry
-        if (responseHeader && webSocket.readyState === WebSocket.OPEN) {
-          webSocket.send(Buffer.from(responseHeader));
-        }
         s.on('close', () => { if (webSocket.readyState === WebSocket.OPEN) webSocket.close(); });
         s.on('error', () => { if (webSocket.readyState === WebSocket.OPEN) webSocket.close(); });
         this.remoteSocketToWS(s, webSocket, null, null);
@@ -319,10 +319,6 @@ class GatewayServer {
     try {
       const s = await connectAndWrite(addressRemote, portRemote);
       remoteSocket.value = s;
-      // Kirim response header VLESS secara instan untuk mencegah EOF
-      if (responseHeader && webSocket.readyState === WebSocket.OPEN) {
-        webSocket.send(Buffer.from(responseHeader));
-      }
       s.on('close', () => { if (webSocket.readyState === WebSocket.OPEN) webSocket.close(); });
       s.on('error', () => { if (webSocket.readyState === WebSocket.OPEN) webSocket.close(); });
       this.remoteSocketToWS(s, webSocket, null, retry);
